@@ -10,7 +10,7 @@ import sys
 import time
 
 
-VERBOSE = True
+VERBOSE = False
 DEFAULT_FILE = 'germany-bw.png'
 NUM_LINES = 20
 
@@ -224,6 +224,8 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
             print()
             print('===== BEGIN GENERATION {} ====='.format(seqnr))
             print('== MUTATE ==')
+        else:
+            print('Generation {}'.format(seqnr))
         run_mutation(population)
         if VERBOSE:
             print('== RECOMBINE ==')
