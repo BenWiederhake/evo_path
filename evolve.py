@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import json
-from math import ceil, sqrt, pi, sin, cos
+from math import atan2, ceil, sqrt, pi, sin, cos
 import PIL.Image as Image
 import PIL.ImageDraw as ImageDraw
 import random
@@ -14,11 +14,11 @@ VERBOSE = True
 DEFAULT_FILE = 'germany-bw.png'
 NUM_LINES = 20
 
-NUM_GENERATIONS = 20
+NUM_GENERATIONS = 80
 INITIAL_SIZE_PERCENT = 80
 MUTATE_POPULATION_PERCENT = 50
 MUTATE_GAUSS_SIGMA_PERCENT = 15
-RECOMBINE_POPULATION_PERCENT = 30
+RECOMBINE_POPULATION_PERCENT = 40
 SELECTION_KEEP_SPECIMEN = 20
 # TODO: Implement something like MAX_AGE
 
@@ -36,10 +36,14 @@ class Specimen:
     def __init__(self, path, size):
         self.path = [clamp_xy(xy, size) for xy in path]
         if VERBOSE:
-            print('CREATE path', [(round(x), round(y)) for x, y in self.path])
+            print('CREATE path', self.printable_path())
         self.image = None
         self.penalty = None
         self.size = size
+        self.is_canonical = False
+
+    def printable_path(self):
+        return [(round(x), round(y)) for x, y in self.path]
 
     def mutate(self):
         # TODO: Implement the BetterIdeas™ described in this post:
@@ -80,16 +84,45 @@ class Specimen:
     def compute_image(self):
         if self.image is not None:
             return self.image
-        raise NotImplementedError()
+
+        self.image = Image.new('L', self.size)
+        d = ImageDraw.ImageDraw(self.image)
+        # TODO: Try using anti-aliasing and lessen the penalty computation if it's "only" a border pixel
+        d.polygon(self.path, fill=(255,))
+        del d
 
         return self.image
 
     def compute_penalty(self, dst_img):
         if self.penalty is not None:
             return self.penalty
-        raise NotImplementedError()
 
+        penalty = 0
+        for expected, actual in zip(dst_img.getdata(), self.compute_image().getdata()):
+            penalty += abs(actual - expected)
+
+        self.penalty = penalty
+        if VERBOSE:
+            print('PENALTY {} for path {}'.format(self.penalty, self.printable_path()))
         return self.penalty
+
+    def canonicalize(self):
+        if self.is_canonical:
+            return
+
+        wc, hc = self.size
+        wc /= 2
+        hc /= 2
+
+        angles = [atan2(y - hc, x - wc) for x, y in self.path]
+        # Poor man's argmin_i(abs(angle[i])):
+        _, first_vertex = min((abs(angle), i) for i, angle in enumerate(angles))
+
+        if first_vertex != 0:
+            self.path = self.path[first_vertex:] + self.path[:first_vertex]
+            # This should not change `image` or `penalty`, so don't invalidate either of these.
+
+        self.is_canonical = True
 
 
 def make_initial(size, num_lines):
@@ -143,11 +176,18 @@ def run_recombination(population):
 
 
 def run_selection(population, dst_img):
-    raise NotImplementedError()
+    population.sort(key=lambda specimen: specimen.compute_penalty(dst_img))
+    if VERBOSE:
+        print('removing {} specimen'.format(len(population) - SELECTION_KEEP_SPECIMEN))
+        print('CUTOFF', population[SELECTION_KEEP_SPECIMEN].compute_penalty(dst_img))
+    return population[:SELECTION_KEEP_SPECIMEN]
 
 
 def run_canonicalization(population):
-    raise NotImplementedError()
+    # TODO: Should also check handedness here.
+    # I.e., prevent specimen from going counter-clockwise when the rest is clockwise.
+    for specimen in population:
+        specimen.canonicalize()
 
 
 def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_intermediate_pattern=None):
@@ -175,14 +215,16 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
         run_recombination(population)
         if VERBOSE:
             print('== SELECT ==')
-        run_selection(population, dst_img)
+            print('Judging {} specimen'.format(len(population)))
+        population = run_selection(population, dst_img)
         if VERBOSE:
             print('== CANONICALIZE ==')
+            print('Now there are {} specimen'.format(len(population)))
         run_canonicalization(population)
 
         if render_intermediate_pattern is not None:
             intermediate = population[0]
-            intermediate_img = intermediate.compute_img()
+            intermediate_img = intermediate.compute_image()
             intermediate_img.save(render_intermediate_pattern.format(seqnr=seqnr))
 
     if VERBOSE:
@@ -191,7 +233,7 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
     result = population[0]
     # .img and .penalty are already populated due to `run_selection`.
     # However, call`compute_XXX` just in case:
-    return result.path, result.compute_img(), result.compute_penalty(dst_img)
+    return result.path, result.compute_image(), result.compute_penalty(dst_img)
 
 
 def run_on_file(filename, num_lines):
@@ -216,11 +258,12 @@ def run_on_file(filename, num_lines):
                     size=dst_img.size,
                     num_lines=num_lines,
                     ),
-                'result_filename': result_basename + 'png',
-                'result_path': result_path,
-                'result_penalty': result_penalty,
-                'size': dst_img.size,
-                'render_intermediate_pattern': render_intermediate_pattern,
+                'result': dict(
+                    filename=result_basename + 'png',
+                    path=result_path,
+                    penalty=result_penalty,
+                    ),
+                'render_intermediate_pattern': intermediate,
                 'generations': NUM_GENERATIONS,
                 'run_id': run_id,
                 'parameters': dict(
