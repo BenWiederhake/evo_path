@@ -10,6 +10,7 @@ import sys
 import time
 
 
+VERBOSE = True
 DEFAULT_FILE = 'germany-bw.png'
 NUM_LINES = 20
 
@@ -17,6 +18,7 @@ NUM_GENERATIONS = 20
 INITIAL_SIZE_PERCENT = 80
 MUTATE_POPULATION_PERCENT = 50
 MUTATE_GAUSS_SIGMA_PERCENT = 15
+RECOMBINE_POPULATION_PERCENT = 30
 SELECTION_KEEP_SPECIMEN = 20
 # TODO: Implement something like MAX_AGE
 
@@ -33,7 +35,8 @@ def clamp_xy(xy, size):
 class Specimen:
     def __init__(self, path, size):
         self.path = [clamp_xy(xy, size) for xy in path]
-        print('CREATE path', self.path)
+        if VERBOSE:
+            print('CREATE path', [(round(x), round(y)) for x, y in self.path])
         self.image = None
         self.penalty = None
         self.size = size
@@ -49,6 +52,28 @@ class Specimen:
 
         new_path = list(self.path)
         new_path[index] = new_xy
+
+        return Specimen(new_path, self.size)
+
+    def recombine(self, other):
+        # TODO: Implement the BetterIdeas™ described in this post:
+        # https://www.reddit.com/r/zekach/comments/hmkjx6/how_could_this_be_automated/fx79ton/
+
+        assert self.size == other.size
+        assert len(self.path) == len(other.path)
+
+        splice_from = random.randrange(len(self.path))
+        splice_until = splice_from
+        while splice_until == splice_from:
+            splice_until = random.randrange(len(self.path))
+
+        if splice_from > splice_until:
+            splice_from, splice_until = splice_until, splice_from
+            adam, eve = other.path, self.path
+        else:
+            adam, eve = self.path, other.path
+
+        new_path = adam[:splice_from] + eve[splice_from:splice_until] + adam[splice_until:]
 
         return Specimen(new_path, self.size)
 
@@ -83,7 +108,9 @@ def make_initial(size, num_lines):
 
 
 def sample_percentage(population, percentage):
-    return random.sample(population, ceil(len(population) * percentage / 100))
+    n = ceil(len(population) * percentage / 100)
+    sample = random.sample(population, n)
+    return sample
 
 
 def run_mutation(population):
@@ -92,9 +119,27 @@ def run_mutation(population):
         # so this is perfectly safe and also doesn't double-mutate any specimen.
         population.append(specimen.mutate())
 
+    while len(population) < SELECTION_KEEP_SPECIMEN:
+        # The initial population is too low. Fill it up with mutations.
+        # Double-mutations are welcome.
+        specimen = random.sample(population, 1)[0]
+        population.append(specimen.mutate())
+
 
 def run_recombination(population):
-    raise NotImplementedError()
+    orig_population = len(population)
+    orig_indices = list(range(orig_population))
+    for adam_index, eve_index in zip(sample_percentage(orig_indices, RECOMBINE_POPULATION_PERCENT), sample_percentage(orig_indices, RECOMBINE_POPULATION_PERCENT)):
+        # We use `sample_percentage` to avoid duplicates.
+        # However, this does not cover the case of `adam_index == eve_index`.
+        # Since this shouldn't happen too often anyway, we can just respample eve.
+        while adam_index == eve_index:
+            eve_index = random.randrange(orig_population)
+
+        # Note that the sample *lists* are computed before the first `append()` call,
+        # and that rerolling only considers `orig_population`,
+        # so this is perfectly safe and also doesn't double-recombine any specimen.
+        population.append(population[adam_index].recombine(population[eve_index]))
 
 
 def run_selection(population, dst_img):
@@ -120,15 +165,28 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
         population.append(make_initial(dst_img.size, num_lines))
 
     for seqnr in range(generations):
+        if VERBOSE:
+            print()
+            print('===== BEGIN GENERATION {} ====='.format(seqnr))
+            print('== MUTATE ==')
         run_mutation(population)
+        if VERBOSE:
+            print('== RECOMBINE ==')
         run_recombination(population)
+        if VERBOSE:
+            print('== SELECT ==')
         run_selection(population, dst_img)
+        if VERBOSE:
+            print('== CANONICALIZE ==')
         run_canonicalization(population)
 
         if render_intermediate_pattern is not None:
             intermediate = population[0]
             intermediate_img = intermediate.compute_img()
             intermediate_img.save(render_intermediate_pattern.format(seqnr=seqnr))
+
+    if VERBOSE:
+        print('== END EVOLUTION ==')
 
     result = population[0]
     # .img and .penalty are already populated due to `run_selection`.
@@ -174,6 +232,7 @@ def run_on_file(filename, num_lines):
                         GAUSS_SIGMA_PERCENT=MUTATE_GAUSS_SIGMA_PERCENT,
                         ),
                     recombination=dict(
+                        POPULATION_PERCENT=RECOMBINE_POPULATION_PERCENT,
                         ),
                     selection=dict(
                         KEEP_SPECIMEN=SELECTION_KEEP_SPECIMEN,
