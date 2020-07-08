@@ -21,28 +21,43 @@ how you could automatically simplify a shoreline. I got a bit very much into it.
 An example run looks like this:
 
 ```
-$ ./evolve.py
-run_id = T1594228701825_R7b87828c
-Success. Written to result_T1594228701825_R7b87828c_P10000.png and result_T1594228701825_R7b87828c_P10000.txt
+$ ./evolve.py germany-bw-small.png
+run_id = T1594238511560_R3c152007
+Generation 0
+Generation 1
+[… SNIP …]
+Generation 76
+Generation 77
+Generation 78
+Generation 79
+Success. Written to output/result_T1594238511560_R3c152007_P6928749.png and output/result_T1594238511560_R3c152007_P6928749.txt
 ```
 
-FIXME: Show `ls` output, show results inline.
+And here's what the result looks like:
+
+![An animation that switches between the real map of Germany and a simplified map that uses only 20 lines](germany-approx.gif)
 
 ## Performance
 
-FIXME
+Processing power: Terrible. The bottleneck is evaluating the penalty.
 
-Probably terrible, although I'm not yet sure what the bottleneck is going to be: Drawing the polygon or evaluating the penalty amount?
+Quality: Excellent. Just 80 generations, and a population of 20-40 specimen
+results in a rather well-recognizable map. I like it :D
 
 ## TODOs
 
-* EVERYTHING
+* Optimize penalty computation
+* Rewrite in Rust?
+* Check for handedness, especially with low line counts
+* Turn up the numbers, these are rookie numbers!
+* Implement additional final cleanup-pass
+* Implement [advanced approaches](https://www.reddit.com/r/zekach/comments/hmkjx6/how_could_this_be_automated/fx79ton/)
 
 ## NOTDOs
 
 Here are some things this project will definitely not support:
 * Disconnected landmasses
-* Completely different approaches (do them as a final pass or something)
+* Completely different approaches
 
 ## License
 
