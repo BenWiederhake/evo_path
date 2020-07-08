@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+from math import sqrt, pi, sin, cos
 import PIL.Image as Image
 import PIL.ImageDraw as ImageDraw
 import secrets
@@ -12,6 +13,7 @@ DEFAULT_FILE = 'germany-bw.png'
 NUM_LINES = 20
 
 NUM_GENERATIONS = 20
+INITIAL_SIZE_PERCENT = 80
 KEEP_SPECIMEN = 20
 # TODO: Implement something like MAX_AGE
 
@@ -21,23 +23,53 @@ def make_run_id():
     return 'T{}_R{}'.format(str(int(time.time() * 1000)), secrets.token_hex(4))
 
 
+def clamp_xy(xy, size):
+    return tuple(max(0, min(val, max_val)) for val, max_val in zip(xy, size))
+
+
+class Specimen:
+    def __init__(self, path, size):
+        self.path = [clamp_xy(xy, size) for xy in path]
+        print('CREATE path', self.path)
+        self.image = None
+        self.penalty = None
+        self.size = size
+
+    def compute_image(self):
+        if self.image is not None:
+            return self.image
+        raise NotImplementedError()
+
+        return self.image
+
+    def compute_penalty(self, dst_img):
+        if self.penalty is not None:
+            return self.penalty
+        raise NotImplementedError()
+
+        return self.penalty
+
+
 def make_initial(size, num_lines):
+    path = []
+    w, h = size
+    wc = (w / 2)
+    hc = (h / 2)
+    wr = (w / 2) * INITIAL_SIZE_PERCENT / 100
+    hr = (h / 2) * INITIAL_SIZE_PERCENT / 100
+    for i in range(num_lines):
+        path.append((
+            wc + wr * cos(2 * pi * i / num_lines),
+            hc - hr * sin(2 * pi * i / num_lines),
+            ))
+    return Specimen(path, size)
+
+
+def run_mutation(population):
     raise NotImplementedError()
 
 
-def render_path(path, size):
-    raise NotImplementedError()
-
-
-def compute_penalty(result_img, dst_img):
-    raise NotImplementedError()
-
-
-def run_mutation(population, size):
-    raise NotImplementedError()
-
-
-def run_recombination(population, size):
+def run_recombination(population):
     raise NotImplementedError()
 
 
@@ -58,22 +90,21 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
         population = []
         inject_initial = True
     else:
-        population = list(initial_population)
+        population = [Specimen(path) for path in initial_population]
 
     if inject_initial:
         population.append(make_initial(dst_img.size, num_lines))
 
     for seqnr in range(generations):
-        run_mutation(population, dst_img.size)
-        run_recombination(population, dst_img.size)
+        run_mutation(population)
+        run_recombination(population)
         run_selection(population, dst_img)
         run_canonicalization(population)
 
-    result_path = population[0]
-    result_img = dst_img # render_path(result_path, dst_img.size)
-    result_penalty = 10000 # compute_penalty(result_img, dst_img)
-
-    return result_path, result_img, result_penalty
+    result = population[0]
+    # .img and .penalty are already populated due to `run_selection`.
+    # However, call`compute_XXX` just in case:
+    return result.path, result.compute_img(), result.compute_penalty(dst_img)
 
 
 def run_on_file(filename, num_lines):
@@ -105,6 +136,9 @@ def run_on_file(filename, num_lines):
                 'generations': NUM_GENERATIONS,
                 'run_id': run_id,
                 'parameters': dict(
+                    initial=dict(
+                        INITIAL_SIZE_PERCENT=INITIAL_SIZE_PERCENT
+                        ),
                     mutation=dict(
                         ),
                     recombination=dict(
