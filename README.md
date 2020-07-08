@@ -3,7 +3,8 @@
 > Evolves a shoreline simplification
 
 [Someone asked](https://www.reddit.com/r/zekach/comments/hmkjx6/how_could_this_be_automated/)
-how you could automatically simplify a shoreline. I got a bit very much into it.
+how you could automatically [simplify a shoreline](https://www.reddit.com/r/MapPorn/comments/hmdoy8/map_of_japan_made_from_5_to_500_edges/).
+I got a bit very much into it.
 
 ## Table of Contents
 
