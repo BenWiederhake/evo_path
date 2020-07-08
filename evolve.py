@@ -16,9 +16,10 @@ NUM_LINES = 20
 
 NUM_GENERATIONS = 80
 INITIAL_SIZE_PERCENT = 80
-MUTATE_POPULATION_PERCENT = 50
-MUTATE_GAUSS_SIGMA_PERCENT = 15
-RECOMBINE_POPULATION_PERCENT = 40
+MUTATE_POPULATION_PERCENT = 60
+MUTATE_TELEPORT_PERCENT = 5
+MUTATE_GAUSS_SIGMA_PERCENT = 10
+RECOMBINE_POPULATION_PERCENT = 30
 SELECTION_KEEP_SPECIMEN = 20
 # TODO: Implement something like MAX_AGE
 
@@ -49,7 +50,21 @@ class Specimen:
         # TODO: Implement the BetterIdeas™ described in this post:
         # https://www.reddit.com/r/zekach/comments/hmkjx6/how_could_this_be_automated/fx79ton/
 
-        index = random.randrange(len(self.path))
+        path = list(self.path)  # Copy
+
+        if random.random() < MUTATE_TELEPORT_PERCENT / 100:
+            former_index = random.randrange(len(path))
+            new_index = random.randrange(len(path)) - 1
+            # `new_index == former_index` means "snap back to the center, and add a random offset
+            # Thanks to python's interpretation of negative indices, this "just works".
+
+            path.pop(former_index)
+            new_center = tuple((a + b) / 2 for a, b in zip(path[new_index - 1], path[new_index]))
+            path.insert(new_index, new_center)
+
+            index = new_index
+        else:
+            index = random.randrange(len(self.path))
 
         old_xy = self.path[index]
         new_xy = [random.gauss(val, max_val * MUTATE_GAUSS_SIGMA_PERCENT / 100) for val, max_val in zip(old_xy, self.size)]
@@ -225,7 +240,7 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
         if render_intermediate_pattern is not None:
             intermediate = population[0]
             intermediate_img = intermediate.compute_image()
-            intermediate_img.save(render_intermediate_pattern.format(seqnr=seqnr))
+            intermediate_img.save(render_intermediate_pattern.format(seqnr=seqnr, penalty=intermediate.compute_penalty(dst_img)))
 
     if VERBOSE:
         print('== END EVOLUTION ==')
@@ -240,7 +255,7 @@ def run_on_file(filename, num_lines):
     run_id = make_run_id()
     print('run_id = {}'.format(run_id))
     dst_img = Image.open(filename).convert('L')
-    intermediate = 'output/intermediate_{}_I{{seqnr:08}}.png'.format(run_id)
+    intermediate = 'output/intermediate_{}_I{{seqnr:08}}_P{{penalty:010}}.png'.format(run_id)
 
     result_path, result_img, result_penalty = run_evolution(
         dst_img, num_lines,
@@ -273,6 +288,7 @@ def run_on_file(filename, num_lines):
                     mutation=dict(
                         POPULATION_PERCENT=MUTATE_POPULATION_PERCENT,
                         GAUSS_SIGMA_PERCENT=MUTATE_GAUSS_SIGMA_PERCENT,
+                        TELEPORT_PERCENT=MUTATE_TELEPORT_PERCENT,
                         ),
                     recombination=dict(
                         POPULATION_PERCENT=RECOMBINE_POPULATION_PERCENT,
