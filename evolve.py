@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import json
-from math import atan2, ceil, sqrt, pi, sin, cos
+from math import atan2, ceil, pi, sin, cos
 import PIL.Image as Image
 import PIL.ImageDraw as ImageDraw
 import random
@@ -67,7 +67,8 @@ class Specimen:
             index = random.randrange(len(self.path))
 
         old_xy = self.path[index]
-        new_xy = [random.gauss(val, max_val * MUTATE_GAUSS_SIGMA_PERCENT / 100) for val, max_val in zip(old_xy, self.size)]
+        new_xy = [random.gauss(val, max_val * MUTATE_GAUSS_SIGMA_PERCENT / 100)
+                  for val, max_val in zip(old_xy, self.size)]
 
         new_path = list(self.path)
         new_path[index] = new_xy
