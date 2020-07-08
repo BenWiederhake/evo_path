@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import json
-from math import sqrt, pi, sin, cos
+from math import ceil, sqrt, pi, sin, cos
 import PIL.Image as Image
 import PIL.ImageDraw as ImageDraw
+import random
 import secrets
 import sys
 import time
@@ -14,7 +15,9 @@ NUM_LINES = 20
 
 NUM_GENERATIONS = 20
 INITIAL_SIZE_PERCENT = 80
-KEEP_SPECIMEN = 20
+MUTATE_POPULATION_PERCENT = 50
+MUTATE_GAUSS_SIGMA_PERCENT = 15
+SELECTION_KEEP_SPECIMEN = 20
 # TODO: Implement something like MAX_AGE
 
 
@@ -34,6 +37,20 @@ class Specimen:
         self.image = None
         self.penalty = None
         self.size = size
+
+    def mutate(self):
+        # TODO: Implement the BetterIdeas™ described in this post:
+        # https://www.reddit.com/r/zekach/comments/hmkjx6/how_could_this_be_automated/fx79ton/
+
+        index = random.randrange(len(self.path))
+
+        old_xy = self.path[index]
+        new_xy = [random.gauss(val, max_val * MUTATE_GAUSS_SIGMA_PERCENT / 100) for val, max_val in zip(old_xy, self.size)]
+
+        new_path = list(self.path)
+        new_path[index] = new_xy
+
+        return Specimen(new_path, self.size)
 
     def compute_image(self):
         if self.image is not None:
@@ -65,8 +82,15 @@ def make_initial(size, num_lines):
     return Specimen(path, size)
 
 
+def sample_percentage(population, percentage):
+    return random.sample(population, ceil(len(population) * percentage / 100))
+
+
 def run_mutation(population):
-    raise NotImplementedError()
+    for specimen in sample_percentage(population, MUTATE_POPULATION_PERCENT):
+        # Note that the sample *list* is computed before the first `append()` call,
+        # so this is perfectly safe and also doesn't double-mutate any specimen.
+        population.append(specimen.mutate())
 
 
 def run_recombination(population):
@@ -101,6 +125,11 @@ def run_evolution(dst_img, num_lines, generations=NUM_GENERATIONS, render_interm
         run_selection(population, dst_img)
         run_canonicalization(population)
 
+        if render_intermediate_pattern is not None:
+            intermediate = population[0]
+            intermediate_img = intermediate.compute_img()
+            intermediate_img.save(render_intermediate_pattern.format(seqnr=seqnr))
+
     result = population[0]
     # .img and .penalty are already populated due to `run_selection`.
     # However, call`compute_XXX` just in case:
@@ -126,6 +155,7 @@ def run_on_file(filename, num_lines):
                 'flavor': 'IRREGULAR_RIDDANCE_VIOLA',
                 'input': dict(
                     filename=filename,
+                    size=dst_img.size,
                     num_lines=num_lines,
                     ),
                 'result_filename': result_basename + 'png',
@@ -137,17 +167,19 @@ def run_on_file(filename, num_lines):
                 'run_id': run_id,
                 'parameters': dict(
                     initial=dict(
-                        INITIAL_SIZE_PERCENT=INITIAL_SIZE_PERCENT
+                        SIZE_PERCENT=INITIAL_SIZE_PERCENT,
                         ),
                     mutation=dict(
+                        POPULATION_PERCENT=MUTATE_POPULATION_PERCENT,
+                        GAUSS_SIGMA_PERCENT=MUTATE_GAUSS_SIGMA_PERCENT,
                         ),
                     recombination=dict(
                         ),
                     selection=dict(
-                        KEEP_SPECIMEN=KEEP_SPECIMEN,
+                        KEEP_SPECIMEN=SELECTION_KEEP_SPECIMEN,
                         ),
                     canonicalization=dict(
-                        method='from_middle,rightmost_is_first'
+                        method='from_middle,rightmost_is_first',
                         ),
                     ),
                 },
